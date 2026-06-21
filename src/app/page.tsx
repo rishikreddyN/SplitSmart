@@ -1,102 +1,126 @@
-import Image from "next/image";
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { Wallet, Sparkles, BrainCircuit, Receipt, ArrowRight, Share2, ShieldCheck, History } from 'lucide-react';
 
-export default function Home() {
+export default async function LandingPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('splitsmart_session')?.value;
+
+  if (token) {
+    redirect('/dashboard');
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen relative flex flex-col justify-between overflow-hidden bg-[#090d16]">
+      {/* Decorative gradient glowing circles */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-900/10 rounded-full blur-[120px] pointer-events-none" />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      {/* Header */}
+      <header className="max-w-7xl mx-auto w-full px-6 py-6 flex items-center justify-between z-10">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+            <Wallet className="w-5 h-5 text-white" />
+          </div>
+          <span className="font-bold text-xl tracking-tight text-white">
+            Split<span className="text-cyan-400">Smart</span>
+          </span>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <Link href="/login" className="text-sm font-medium text-gray-300 hover:text-white transition">
+            Sign In
+          </Link>
+          <Link
+            href="/register"
+            className="text-sm font-medium bg-gradient-to-r from-violet-600 to-cyan-500 hover:from-violet-700 hover:to-cyan-600 text-white px-4 py-2 rounded-xl transition shadow-lg shadow-violet-500/15"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Get Started
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="max-w-7xl mx-auto px-6 py-16 flex-1 flex flex-col lg:flex-row items-center justify-between gap-12 z-10 w-full">
+        <div className="flex-1 text-center lg:text-left space-y-6">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-xs font-semibold text-violet-300">
+            <Sparkles className="w-3.5 h-3.5" />
+            AI-Powered Debt Settlement
+          </div>
+          
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight">
+            The Smartest Way to <br />
+            <span className="text-gradient">Split Shared Bills</span>
+          </h1>
+          
+          <p className="text-gray-400 text-lg max-w-xl mx-auto lg:mx-0">
+            Ditch the calculators and awkward reminder messages. Track group expenses, split itemized receipts using Gemini AI, and settle up with the minimum number of transactions.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-4">
+            <Link
+              href="/register"
+              className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-violet-600 to-cyan-500 text-white font-semibold rounded-xl flex items-center justify-center gap-2 hover:opacity-95 transition shadow-lg shadow-violet-500/25"
+            >
+              Start Splitting Free <ArrowRight className="w-5 h-5" />
+            </Link>
+            <Link
+              href="/login"
+              className="w-full sm:w-auto px-8 py-4 bg-gray-800/40 hover:bg-gray-800/60 border border-gray-700 text-gray-300 font-semibold rounded-xl flex items-center justify-center transition"
+            >
+              Sign In
+            </Link>
+          </div>
+        </div>
+
+        {/* Hero Features grid (Premium visualization) */}
+        <div className="flex-1 w-full max-w-lg lg:max-w-none grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="glass-card p-6 rounded-2xl flex flex-col justify-between h-48">
+            <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+              <BrainCircuit className="w-6 h-6 text-violet-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">AI Receipt Scan</h3>
+              <p className="text-sm text-gray-400">Upload any receipt. Gemini extracts items, prices, tax, and totals in seconds.</p>
+            </div>
+          </div>
+
+          <div className="glass-card p-6 rounded-2xl flex flex-col justify-between h-48">
+            <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+              <Share2 className="w-6 h-6 text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">Advanced Split Strategies</h3>
+              <p className="text-sm text-gray-400">Equal, custom, percentage, shares, or itemized pizzas. Splitting made fair.</p>
+            </div>
+          </div>
+
+          <div className="glass-card p-6 rounded-2xl flex flex-col justify-between h-48">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+              <ShieldCheck className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">Min-Debt Engine</h3>
+              <p className="text-sm text-gray-400">Greedy settlement calculations reduce transaction counts to keep balances clear.</p>
+            </div>
+          </div>
+
+          <div className="glass-card p-6 rounded-2xl flex flex-col justify-between h-48">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+              <History className="w-6 h-6 text-amber-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">Trip Timeline & Recurrence</h3>
+              <p className="text-sm text-gray-400">Track budgets, chronological timelines for travel, and recurring subscription bills.</p>
+            </div>
+          </div>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      {/* Footer */}
+      <footer className="w-full text-center py-6 text-xs text-gray-600 border-t border-gray-900 z-10 bg-[#070b13]">
+        &copy; {new Date().getFullYear()} SplitSmart Inc. Built with Next.js 15, Drizzle ORM, and Gemini API.
       </footer>
     </div>
   );
