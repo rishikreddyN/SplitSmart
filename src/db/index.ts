@@ -1,11 +1,9 @@
-import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import * as schema from './schema';
 
-const client = createClient({
-  url: process.env.DATABASE_URL || 'file:sqlite.db',
-  authToken: process.env.DATABASE_AUTH_TOKEN,
-});
+const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/splitsmart';
+const client = postgres(connectionString);
 
 export const db = drizzle(client, { schema });
 export type DbType = typeof db;
