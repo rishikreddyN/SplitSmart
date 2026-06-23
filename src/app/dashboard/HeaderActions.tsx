@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut, Bell, Check, Loader2 } from 'lucide-react';
+import ThemeToggle from '@/app/ThemeToggle';
 
 interface NotificationItem {
   id: string;
@@ -78,6 +79,9 @@ export default function HeaderActions({ user, initialNotifications }: HeaderActi
 
   return (
     <div className="flex items-center gap-4 relative">
+      {/* Theme Toggle */}
+      <ThemeToggle />
+
       {/* Notifications Bell */}
       <div className="relative">
         <button

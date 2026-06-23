@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ThemeToggle from '@/app/ThemeToggle';
 import { 
   ArrowLeft, Users, Receipt, CreditCard, PieChart as ChartIcon, Settings, Plus, 
   Upload, Sparkles, AlertCircle, Loader2, ArrowUpRight, ArrowDownRight, Check, Trash2, 
@@ -256,21 +257,16 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
       setExpDate(result.date || new Date().toISOString().split('T')[0]);
       setExpCategory('shopping'); // default fallback
 
-      // If itemized items returned, we can pre-populate custom amounts!
-      if (result.items && result.items.length > 0) {
-        // Let's set it as custom itemized or amount split
-        setExpSplitType('itemized');
-        const customVals: Record<string, number> = {};
-        // Just divide overall amount by members initially, but let user adjust
-        data.members.forEach((m, idx) => {
-          if (idx === 0) customVals[m.id] = result.total || 0;
-          else customVals[m.id] = 0;
-        });
-        setExpSplits(customVals);
-        
-        // Print message so user knows item splits are pre-filled
-        setExpenseError(`Scanned ${result.items.length} items totaling ₹${result.total}. Assigned total to you, feel free to distribute item amounts among members!`);
-      }
+      // Prefill as equal split by default so it updates who owes what immediately
+      setExpSplitType('equal');
+      const defSplits: Record<string, number> = {};
+      data.members.forEach((m) => {
+        defSplits[m.id] = 1; // all members participate by default
+      });
+      setExpSplits(defSplits);
+      
+      // Print message so user knows splits are pre-filled equally
+      setExpenseError(`Scanned ${result.items?.length || 0} items totaling ₹${result.total || ''}. Auto-assigned equal splits among all members!`);
 
       setOcrModalOpen(false);
       setOcrFile(null);
@@ -576,7 +572,7 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
   };
 
   return (
-    <div className="min-h-screen bg-[#090d16] flex flex-col print:bg-white print:text-black">
+    <div className="min-h-screen bg-background text-foreground flex flex-col print:bg-white print:text-black">
       
       {/* Header */}
       <header className="border-b border-gray-900 bg-[#070b13]/80 sticky top-0 z-20 backdrop-blur-md print:hidden">
@@ -594,6 +590,8 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeToggle />
+            
             <button
               onClick={() => setInviteModalOpen(true)}
               className="px-4 py-2 bg-gray-900 hover:bg-gray-850 border border-gray-800 rounded-xl text-xs font-semibold text-cyan-400 flex items-center gap-1.5 transition cursor-pointer"

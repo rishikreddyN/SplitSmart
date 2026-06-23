@@ -115,7 +115,7 @@ export default async function DashboardPage() {
   const roundedOverallBalance = Math.round(overallBalance * 100) / 100;
 
   return (
-    <div className="min-h-screen bg-[#090d16] flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Header */}
       <header className="border-b border-gray-900 bg-[#070b13]/80 sticky top-0 z-20 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">

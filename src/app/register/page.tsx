@@ -52,7 +52,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-6 bg-[#090d16]">
+    <div className="min-h-screen relative flex items-center justify-center p-6 bg-background text-foreground">
       {/* Background gradients */}
       <div className="absolute top-[20%] left-[20%] w-[30%] h-[30%] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-[20%] right-[20%] w-[30%] h-[30%] bg-cyan-900/10 rounded-full blur-[100px] pointer-events-none" />

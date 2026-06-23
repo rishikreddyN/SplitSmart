@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Wallet, Sparkles, BrainCircuit, Receipt, ArrowRight, Share2, ShieldCheck, History } from 'lucide-react';
+import ThemeToggle from '@/app/ThemeToggle';
 
 export default async function LandingPage() {
   const cookieStore = await cookies();
@@ -12,7 +13,7 @@ export default async function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen relative flex flex-col justify-between overflow-hidden bg-[#090d16]">
+    <div className="min-h-screen relative flex flex-col justify-between overflow-hidden bg-background text-foreground">
       {/* Decorative gradient glowing circles */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-900/10 rounded-full blur-[120px] pointer-events-none" />
@@ -29,6 +30,7 @@ export default async function LandingPage() {
         </div>
         
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           <Link href="/login" className="text-sm font-medium text-gray-300 hover:text-white transition">
             Sign In
           </Link>
@@ -119,7 +121,7 @@ export default async function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full text-center py-6 text-xs text-gray-600 border-t border-gray-900 z-10 bg-[#070b13]">
+      <footer className="w-full text-center py-6 text-xs text-gray-600 border-t border-gray-900 z-10 bg-background">
         &copy; {new Date().getFullYear()} SplitSmart Inc. Built with Next.js 15, Drizzle ORM, and Gemini API.
       </footer>
     </div>
