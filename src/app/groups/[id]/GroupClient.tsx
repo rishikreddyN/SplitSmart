@@ -396,11 +396,31 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
   };
 
   // Trigger Settle-Up suggestion click
-  const triggerQuickSettle = (sug: Suggestion) => {
-    setSetFrom(sug.fromUserId);
-    setSetTo(sug.toUserId);
-    setSetAmount(sug.amount.toString());
-    setSettleFormOpen(true);
+  const triggerQuickSettle = async (sug: Suggestion) => {
+    const confirmSettle = window.confirm(
+      `Are you sure you want to mark this suggestion as paid?\n\nThis will record a cash settlement of ₹${sug.amount} from ${sug.fromUserName} to ${sug.toUserName}.`
+    );
+    if (!confirmSettle) return;
+
+    try {
+      const res = await fetch('/api/settlements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId,
+          payerId: sug.fromUserId,
+          receiverId: sug.toUserId,
+          amount: sug.amount,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to record settlement');
+
+      refreshData();
+    } catch (err: any) {
+      alert(err.message);
+    }
   };
 
   // Create Recurring Expense
@@ -531,6 +551,8 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
       amount: exp.amount,
       paidBy: exp.paidBy,
       payerName: exp.payerName,
+      receiverId: undefined,
+      receiverName: undefined,
       splits: exp.splits,
       createdAt: exp.createdAt,
       rawItem: exp,
@@ -540,10 +562,15 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
       type: 'settlement' as const,
       date: set.settledAt ? set.settledAt.slice(0, 10) : '', // YYYY-MM-DD
       category: 'settlement',
-      description: `${set.payerName} paid ${set.receiverName}`,
+      description: set.payerId === userId 
+        ? `You paid ${set.receiverName}` 
+        : set.receiverId === userId 
+        ? `${set.payerName} paid You` 
+        : `${set.payerName} paid ${set.receiverName}`,
       amount: set.amount,
       paidBy: set.payerId,
       payerName: set.payerName,
+      receiverId: set.receiverId,
       receiverName: set.receiverName,
       splits: [],
       createdAt: set.settledAt,
@@ -755,8 +782,23 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                         </div>
 
                         <div className="flex flex-col items-end gap-2 shrink-0">
-                          <span className={`font-extrabold text-sm print:text-black ${item.type === 'expense' ? 'text-white' : 'text-emerald-400'}`}>
-                            {item.type === 'expense' ? '' : '+' }₹{item.amount}
+                          <span className={`font-extrabold text-sm print:text-black ${
+                            item.type === 'expense'
+                              ? 'text-white'
+                              : item.paidBy === userId
+                              ? 'text-gray-400'
+                              : item.receiverId === userId
+                              ? 'text-emerald-400'
+                              : 'text-gray-500'
+                          }`}>
+                            {item.type === 'expense'
+                              ? ''
+                              : item.paidBy === userId
+                              ? '-'
+                              : item.receiverId === userId
+                              ? '+'
+                              : ''
+                            }₹{item.amount}
                           </span>
                           
                           {/* Admin edit/delete buttons */}
@@ -942,10 +984,14 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                         onChange={(e) => setSetFrom(e.target.value)}
                         className="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white outline-none"
                       >
-                        <option value="">Select Debtor</option>
-                        {data.members.map((m) => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
+                        <option value="">Select Payer (Who paid)</option>
+                        {data.members
+                          .filter((m) => m.id !== setTo)
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} ({m.netBalance > 0 ? `+₹${m.netBalance}` : m.netBalance < 0 ? `-₹${Math.abs(m.netBalance)}` : 'Settled'})
+                            </option>
+                          ))}
                       </select>
                     </div>
 
@@ -958,10 +1004,14 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                         onChange={(e) => setSetTo(e.target.value)}
                         className="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-xl text-xs text-white outline-none"
                       >
-                        <option value="">Select Creditor</option>
-                        {data.members.map((m) => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
+                        <option value="">Select Recipient (Who received)</option>
+                        {data.members
+                          .filter((m) => m.id !== setFrom)
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} ({m.netBalance > 0 ? `+₹${m.netBalance}` : m.netBalance < 0 ? `-₹${Math.abs(m.netBalance)}` : 'Settled'})
+                            </option>
+                          ))}
                       </select>
                     </div>
 
