@@ -524,6 +524,47 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
     };
   });
 
+  // Create a combined list of expenses and settlements for ledger history
+  const activityItems = [
+    ...data.expenses.map((exp) => ({
+      id: exp.id,
+      type: 'expense' as const,
+      date: exp.date, // YYYY-MM-DD
+      category: exp.category,
+      description: exp.description,
+      amount: exp.amount,
+      paidBy: exp.paidBy,
+      payerName: exp.payerName,
+      splits: exp.splits,
+      createdAt: exp.createdAt,
+      rawItem: exp,
+    })),
+    ...data.settlements.map((set) => ({
+      id: set.id,
+      type: 'settlement' as const,
+      date: set.settledAt ? set.settledAt.slice(0, 10) : '', // YYYY-MM-DD
+      category: 'settlement',
+      description: `${set.payerName} paid ${set.receiverName}`,
+      amount: set.amount,
+      paidBy: set.payerId,
+      payerName: set.payerName,
+      receiverName: set.receiverName,
+      splits: [],
+      createdAt: set.settledAt,
+      rawItem: set,
+    })),
+  ];
+
+  // Sort by date descending, then by createdAt descending
+  activityItems.sort((a, b) => {
+    const dateCompare = b.date.localeCompare(a.date);
+    if (dateCompare !== 0) return dateCompare;
+    
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
   // Trip Mode Budget Calculation
   const isTripMode = data.group.type === 'travel';
   const budgetLimit = data.group.tripBudget || 0;
@@ -631,7 +672,7 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
               {/* Expenses List */}
               <div className="lg:col-span-2 space-y-4 print:w-full">
                 <div className="flex items-center justify-between print:hidden">
-                  <h3 className="font-bold text-base text-white">Expenses History</h3>
+                  <h3 className="font-bold text-base text-white">Transactions & Settlements</h3>
                   
                   <div className="flex items-center gap-2">
                     <button
@@ -657,73 +698,92 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                   </div>
                 </div>
 
-                {data.expenses.length === 0 ? (
+                {activityItems.length === 0 ? (
                   <div className="glass-panel p-12 rounded-3xl text-center border border-dashed border-gray-850 print:border-gray-300">
                     <Receipt className="w-10 h-10 text-gray-650 mx-auto mb-3" />
-                    <p className="text-gray-400 font-medium">No expenses yet</p>
-                    <p className="text-xs text-gray-600 mt-1">Tap &quot;Add Expense&quot; above to log the first shared bill.</p>
+                    <p className="text-gray-400 font-medium">No transactions yet</p>
+                    <p className="text-xs text-gray-600 mt-1">Tap &quot;Add Expense&quot; above or record a settlement to start.</p>
                   </div>
                 ) : (
                   <div className="space-y-3 print:space-y-2">
-                    {data.expenses.map((exp) => (
+                    {activityItems.map((item) => (
                       <div
-                        key={exp.id}
+                        key={item.id}
                         className="glass-panel p-4 rounded-2xl flex items-start justify-between group/item border border-white/5 print:border-gray-300 print:bg-white"
                       >
                         <div className="flex items-start gap-3">
                           {/* category letter/icon mockup */}
-                          <div className="w-10 h-10 rounded-xl bg-gray-950 flex items-center justify-center shrink-0 uppercase font-black text-sm text-gradient print:border print:border-gray-250">
-                            {exp.category.slice(0,2)}
-                          </div>
+                          {item.type === 'expense' ? (
+                            <div className="w-10 h-10 rounded-xl bg-gray-950 flex items-center justify-center shrink-0 uppercase font-black text-sm text-gradient print:border print:border-gray-250">
+                              {item.category.slice(0,2)}
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-emerald-950/20 border border-emerald-500/20 flex items-center justify-center shrink-0 print:border print:border-gray-250">
+                              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                            </div>
+                          )}
                           
                           <div>
-                            <h4 className="font-bold text-sm text-white print:text-black">{exp.description}</h4>
+                            <h4 className="font-bold text-sm text-white print:text-black">{item.description}</h4>
                             <p className="text-[10px] text-gray-500 mt-0.5">
-                              Paid by <span className="font-semibold text-gray-400 print:text-gray-800">{exp.payerName}</span> &bull; {new Date(exp.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {item.type === 'expense' ? (
+                                <>
+                                  Paid by <span className="font-semibold text-gray-400 print:text-gray-800">{item.payerName}</span>
+                                </>
+                              ) : (
+                                <span className="text-emerald-400 font-semibold uppercase tracking-wider text-[8px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/10">Settlement</span>
+                              )}
+                              {` • ${new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
                             </p>
                             
                             {/* split tooltips/summaries inside exp card */}
-                            <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                              {exp.splits.map(s => (
-                                <span 
-                                  key={s.userId} 
-                                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                                    s.userId === userId 
-                                      ? 'bg-violet-950/30 text-violet-300 border border-violet-500/10' 
-                                      : 'bg-gray-950/40 text-gray-500'
-                                  } print:border print:border-gray-200 print:text-black`}
-                                >
-                                  {s.userName.split(' ')[0]}: ₹{s.shareAmount}
-                                </span>
-                              ))}
-                            </div>
+                            {item.type === 'expense' && (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                {item.splits.map(s => (
+                                  <span 
+                                    key={s.userId} 
+                                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                                      s.userId === userId 
+                                        ? 'bg-violet-950/30 text-violet-300 border border-violet-500/10' 
+                                        : 'bg-gray-950/40 text-gray-500'
+                                    } print:border print:border-gray-200 print:text-black`}
+                                  >
+                                    {s.userName.split(' ')[0]}: ₹{s.shareAmount}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-2 shrink-0">
-                          <span className="font-extrabold text-sm text-white print:text-black">₹{exp.amount}</span>
+                          <span className={`font-extrabold text-sm print:text-black ${item.type === 'expense' ? 'text-white' : 'text-emerald-400'}`}>
+                            {item.type === 'expense' ? '' : '+' }₹{item.amount}
+                          </span>
                           
                           {/* Admin edit/delete buttons */}
-                          <div className="flex items-center gap-1.5 opacity-0 group-hover/item:opacity-100 transition print:hidden">
-                            {(data.currentUserRole === 'admin' || exp.paidBy === userId) && (
-                              <>
-                                <button
-                                  onClick={() => openExpenseModal(exp)}
-                                  className="p-1.5 rounded-lg bg-gray-900 hover:bg-gray-850 text-gray-400 hover:text-white transition cursor-pointer"
-                                  title="Edit Expense"
-                                >
-                                  <Settings className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteExpense(exp.id)}
-                                  className="p-1.5 rounded-lg bg-gray-900 hover:bg-rose-950/30 text-gray-400 hover:text-rose-400 transition cursor-pointer"
-                                  title="Delete Expense"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
+                          {item.type === 'expense' && (
+                            <div className="flex items-center gap-1.5 opacity-0 group-hover/item:opacity-100 transition print:hidden">
+                              {(data.currentUserRole === 'admin' || item.paidBy === userId) && (
+                                <>
+                                  <button
+                                    onClick={() => openExpenseModal(item.rawItem)}
+                                    className="p-1.5 rounded-lg bg-gray-900 hover:bg-gray-850 text-gray-400 hover:text-white transition cursor-pointer"
+                                    title="Edit Expense"
+                                  >
+                                    <Settings className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteExpense(item.id)}
+                                    className="p-1.5 rounded-lg bg-gray-900 hover:bg-rose-950/30 text-gray-400 hover:text-rose-400 transition cursor-pointer"
+                                    title="Delete Expense"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -824,6 +884,44 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                     ))}
                   </div>
                 )}
+
+                {/* Settlements Log */}
+                <div className="pt-6 border-t border-gray-900">
+                  <h3 className="font-bold text-base text-white mb-3 flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 animate-pulse" /> Recorded Settlements Log
+                  </h3>
+                  {data.settlements.length === 0 ? (
+                    <div className="glass-panel p-6 rounded-2xl text-center border border-dashed border-gray-850">
+                      <p className="text-xs text-gray-500">No cash settlements recorded in this group yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar p-1">
+                      {data.settlements.map((set) => (
+                        <div
+                          key={set.id}
+                          className="glass-panel p-3.5 rounded-xl border border-white/5 flex items-center justify-between text-xs animate-fade-in"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center font-bold text-[10px] text-emerald-400">
+                              ✓
+                            </div>
+                            <span className="text-gray-300">
+                              <strong className="text-white font-semibold">{set.payerName}</strong> paid <strong className="text-white font-semibold">{set.receiverName}</strong>
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-extrabold text-emerald-400 block">₹{set.amount}</span>
+                            {set.settledAt && (
+                              <span className="text-[8px] text-gray-600">
+                                {new Date(set.settledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Record Settlement Card Form */}
