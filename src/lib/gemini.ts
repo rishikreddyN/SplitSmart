@@ -35,7 +35,7 @@ export async function parseReceipt(
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-flash-lite-latest',
       generationConfig: {
         responseMimeType: 'application/json',
       },
@@ -75,8 +75,7 @@ export async function parseReceipt(
     return parsed;
   } catch (error: any) {
     console.error('Gemini OCR parsing error:', error);
-    // If API fails (e.g. rate limit, invalid key), fallback to mock data rather than crashing
-    return getMockReceipt(fileName);
+    throw new Error(error.message || 'Gemini API Error');
   }
 }
 
