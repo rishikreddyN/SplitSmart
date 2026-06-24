@@ -138,10 +138,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // Process settlements
     groupSettlements.forEach((set) => {
       if (balances[set.payerId] !== undefined) {
-        balances[set.payerId] += set.amount; // payer pays debt -> net balance increases
+        balances[set.payerId] -= set.amount; // payer pays debt -> net balance decreases (giving money)
       }
       if (balances[set.receiverId] !== undefined) {
-        balances[set.receiverId] -= set.amount; // receiver gets paid -> net balance decreases
+        balances[set.receiverId] += set.amount; // receiver gets paid -> net balance increases (receiving money)
       }
     });
 
