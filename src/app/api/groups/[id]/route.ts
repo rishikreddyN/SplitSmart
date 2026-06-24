@@ -136,12 +136,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
 
     // Process settlements
+    // When B settles ₹100 debt to A:
+    // B (payer/debtor) balance goes from -100 toward 0 → += amount
+    // A (receiver/creditor) balance goes from +200 toward +100 → -= amount
     groupSettlements.forEach((set) => {
       if (balances[set.payerId] !== undefined) {
-        balances[set.payerId] -= set.amount; // payer pays debt -> net balance decreases (giving money)
+        balances[set.payerId] += set.amount;
       }
       if (balances[set.receiverId] !== undefined) {
-        balances[set.receiverId] += set.amount; // receiver gets paid -> net balance increases (receiving money)
+        balances[set.receiverId] -= set.amount;
       }
     });
 

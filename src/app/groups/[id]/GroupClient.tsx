@@ -111,6 +111,18 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
   const [recurringModalOpen, setRecurringModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
 
+  // OCR Scan Results State
+  const [ocrScanResult, setOcrScanResult] = useState<{ storeName: string; date: string; items: { name: string; price: number }[]; total: number } | null>(null);
+
+  // Quick Add Form State
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [qaDescription, setQaDescription] = useState('');
+  const [qaAmount, setQaAmount] = useState('');
+  const [qaPaidBy, setQaPaidBy] = useState(userId);
+  const [qaCategory, setQaCategory] = useState('food');
+  const [qaLoading, setQaLoading] = useState(false);
+  const [qaError, setQaError] = useState('');
+
   // Expense Form State
   const [expDescription, setExpDescription] = useState('');
   const [expAmount, setExpAmount] = useState('');
@@ -251,23 +263,24 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
 
       const result = json.result;
       
+      // Store the full scan result for preview display
+      setOcrScanResult(result);
+      
       // Populate Expense modal fields
-      setExpDescription(result.storeName || 'Gemini Scan');
+      setExpDescription(result.storeName || 'Scanned Receipt');
       setExpAmount(result.total ? result.total.toString() : '');
       setExpDate(result.date || new Date().toISOString().split('T')[0]);
-      setExpCategory('shopping'); // default fallback
+      setExpCategory('shopping');
 
-      // Prefill as equal split by default so it updates who owes what immediately
+      // Prefill as equal split by default
       setExpSplitType('equal');
       const defSplits: Record<string, number> = {};
       data.members.forEach((m) => {
-        defSplits[m.id] = 1; // all members participate by default
+        defSplits[m.id] = 1;
       });
       setExpSplits(defSplits);
       
-      // Print message so user knows splits are pre-filled equally
-      setExpenseError(`Scanned ${result.items?.length || 0} items totaling ₹${result.total || ''}. Auto-assigned equal splits among all members!`);
-
+      setExpenseError('');
       setOcrModalOpen(false);
       setOcrFile(null);
       setExpenseModalOpen(true);
@@ -276,6 +289,58 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
       setOcrError(err.message);
     } finally {
       setOcrLoading(false);
+    }
+  };
+
+  // Quick Add Handler — fast "who paid for what"
+  const handleQuickAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setQaError('');
+
+    const amountNum = parseFloat(qaAmount);
+    if (!qaDescription.trim() || isNaN(amountNum) || amountNum <= 0) {
+      setQaError('Please enter a valid description and amount');
+      return;
+    }
+
+    setQaLoading(true);
+
+    // Auto equal split among all members
+    const splitPayload = data.members.map(m => ({
+      userId: m.id,
+      value: 1,
+    }));
+
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId,
+          description: qaDescription,
+          amount: amountNum,
+          category: qaCategory,
+          date: new Date().toISOString().split('T')[0],
+          paidBy: qaPaidBy,
+          splitType: 'equal',
+          splits: splitPayload,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to add expense');
+
+      setQuickAddOpen(false);
+      setQaDescription('');
+      setQaAmount('');
+      setQaPaidBy(userId);
+      setQaCategory('food');
+      refreshData();
+
+    } catch (err: any) {
+      setQaError(err.message);
+    } finally {
+      setQaLoading(false);
     }
   };
 
@@ -326,6 +391,7 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
       if (!res.ok) throw new Error(json.error || 'Failed to save expense');
 
       setExpenseModalOpen(false);
+      setOcrScanResult(null);
       refreshData();
 
     } catch (err: any) {
@@ -598,22 +664,28 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
     window.print();
   };
 
+  // Compute per-member split preview for Quick Add
+  const qaPreviewPerPerson = data.members.length > 0 && qaAmount ? (parseFloat(qaAmount) / data.members.length) : 0;
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col print:bg-white print:text-black">
+    <div className="min-h-screen bg-background text-foreground flex flex-col print:bg-white print:text-black relative">
       
       {/* Header */}
-      <header className="border-b border-gray-900 bg-[#070b13]/80 sticky top-0 z-20 backdrop-blur-md print:hidden">
+      <header className="border-b border-white/[0.04] bg-[#050810]/90 sticky top-0 z-20 backdrop-blur-xl print:hidden">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
               href="/dashboard"
-              className="w-8 h-8 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-850 flex items-center justify-center text-gray-400 hover:text-white transition"
+              className="w-9 h-9 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] flex items-center justify-center text-gray-400 hover:text-white transition-all duration-200"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
-            <h1 className="font-bold text-lg text-white">
-              {data.group.name}
-            </h1>
+            <div>
+              <h1 className="font-bold text-base text-white tracking-tight">
+                {data.group.name}
+              </h1>
+              <p className="text-[10px] text-gray-500 capitalize">{data.group.type} • {data.members.length} members</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -621,14 +693,14 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
             
             <button
               onClick={() => setInviteModalOpen(true)}
-              className="px-4 py-2 bg-gray-900 hover:bg-gray-850 border border-gray-800 rounded-xl text-xs font-semibold text-cyan-400 flex items-center gap-1.5 transition cursor-pointer"
+              className="px-4 py-2 bg-cyan-500/[0.08] hover:bg-cyan-500/[0.14] border border-cyan-500/[0.12] rounded-xl text-xs font-semibold text-cyan-400 flex items-center gap-1.5 transition-all duration-200 cursor-pointer"
             >
               <Share2 className="w-3.5 h-3.5" /> Invite
             </button>
             
             <button
               onClick={() => openExpenseModal()}
-              className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-95 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-lg shadow-violet-500/10 cursor-pointer"
+              className="btn-glow px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 shadow-lg shadow-violet-500/20 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" /> Add Expense
             </button>
@@ -664,15 +736,15 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
         )}
 
         {/* Tab Controls */}
-        <div className="flex items-center gap-2 border-b border-gray-900 pb-px overflow-x-auto custom-scrollbar print:hidden">
+        <div className="flex items-center gap-1 border-b border-white/[0.04] pb-px overflow-x-auto custom-scrollbar print:hidden">
           {(['dashboard', 'settle', 'recurring', 'analytics', 'settings'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`py-3 px-4 text-xs font-semibold capitalize border-b-2 tracking-wide transition relative shrink-0 cursor-pointer ${
+              className={`py-3 px-4 text-xs font-semibold capitalize tracking-wide transition-all duration-200 relative shrink-0 cursor-pointer rounded-t-lg ${
                 activeTab === tab
-                  ? 'border-violet-500 text-white'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
+                  ? 'text-white tab-active'
+                  : 'text-gray-500 hover:text-gray-300 border-b-2 border-transparent'
               }`}
             >
               {tab === 'settle' ? 'Settle Up' : tab === 'recurring' ? 'Recurring Bills' : tab}
@@ -696,29 +768,111 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Expenses List */}
               <div className="lg:col-span-2 space-y-4 print:w-full">
-                <div className="flex items-center justify-between print:hidden">
+                {/* Quick Add Card */}
+              {!quickAddOpen ? (
+                <button
+                  onClick={() => setQuickAddOpen(true)}
+                  className="w-full glass-panel p-4 rounded-2xl border border-dashed border-violet-500/15 hover:border-violet-500/30 text-left flex items-center gap-3 transition-all duration-200 cursor-pointer group print:hidden animate-fade-in"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/15 flex items-center justify-center group-hover:bg-violet-500/15 transition-all">
+                    <Plus className="w-5 h-5 text-violet-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Quick Add — Who paid for what?</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Tap to quickly log an expense split equally among everyone</p>
+                  </div>
+                </button>
+              ) : (
+                <div className="glass-panel p-5 rounded-2xl border border-violet-500/10 animate-fade-in-up print:hidden">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                      <Wallet className="w-4 h-4 text-violet-400" /> Quick Add Expense
+                    </h4>
+                    <button onClick={() => setQuickAddOpen(false)} className="text-gray-500 hover:text-white text-xs cursor-pointer">✕</button>
+                  </div>
+                  <form onSubmit={handleQuickAdd} className="space-y-3">
+                    {qaError && (
+                      <div className="p-2.5 bg-rose-500/10 border border-rose-500/15 text-rose-300 rounded-xl text-xs">{qaError}</div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <input
+                        type="text"
+                        required
+                        value={qaDescription}
+                        onChange={(e) => setQaDescription(e.target.value)}
+                        placeholder="What was it for? (e.g. Lunch)"
+                        className="sm:col-span-1 px-3 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl text-xs text-white outline-none focus:border-violet-500/30 transition placeholder:text-gray-600"
+                      />
+                      <input
+                        type="number"
+                        required
+                        value={qaAmount}
+                        onChange={(e) => setQaAmount(e.target.value)}
+                        placeholder="₹ Amount"
+                        className="px-3 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl text-xs text-white outline-none focus:border-violet-500/30 transition font-bold placeholder:text-gray-600"
+                      />
+                      <select
+                        value={qaPaidBy}
+                        onChange={(e) => setQaPaidBy(e.target.value)}
+                        className="px-3 py-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl text-xs text-white outline-none focus:border-violet-500/30 transition"
+                      >
+                        {data.members.map((m) => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={qaCategory}
+                          onChange={(e) => setQaCategory(e.target.value)}
+                          className="px-2.5 py-1.5 bg-white/[0.03] border border-white/[0.06] rounded-lg text-[10px] text-gray-400 outline-none capitalize"
+                        >
+                          {['food', 'travel', 'accommodation', 'utilities', 'shopping', 'entertainment', 'groceries', 'other'].map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                        {qaAmount && data.members.length > 0 && (
+                          <span className="text-[10px] text-gray-500">
+                            ₹{qaPreviewPerPerson.toFixed(2)} per person × {data.members.length}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={qaLoading}
+                        className="btn-glow px-5 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-semibold rounded-xl text-xs hover:from-violet-500 hover:to-indigo-500 transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-lg shadow-violet-500/15"
+                      >
+                        {qaLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...</> : <><Plus className="w-3.5 h-3.5" /> Add</>}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between print:hidden">
                   <h3 className="font-bold text-base text-white">Transactions & Settlements</h3>
                   
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setOcrModalOpen(true)}
-                      className="px-3 py-1.5 rounded-lg bg-cyan-950/20 hover:bg-cyan-950/40 border border-cyan-500/20 text-[10px] font-bold text-cyan-400 flex items-center gap-1 transition cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-cyan-500/[0.08] hover:bg-cyan-500/[0.14] border border-cyan-500/[0.12] text-[10px] font-bold text-cyan-400 flex items-center gap-1 transition-all duration-200 cursor-pointer"
                     >
-                      <Sparkles className="w-3.5 h-3.5" /> AI Scan Receipt
+                      <Sparkles className="w-3.5 h-3.5" /> AI Scan
                     </button>
 
                     <a
                       href={`/api/reports/csv?groupId=${groupId}`}
-                      className="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-850 border border-gray-800 text-[10px] font-bold text-gray-400 flex items-center gap-1 transition"
+                      className="px-3 py-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] text-[10px] font-bold text-gray-400 flex items-center gap-1 transition-all"
                     >
-                      <Download className="w-3.5 h-3.5" /> CSV Report
+                      <Download className="w-3.5 h-3.5" /> CSV
                     </a>
 
                     <button
                       onClick={triggerPdfReport}
-                      className="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-850 border border-gray-800 text-[10px] font-bold text-gray-400 flex items-center gap-1 transition cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] text-[10px] font-bold text-gray-400 flex items-center gap-1 transition-all cursor-pointer"
                     >
-                      <Printer className="w-3.5 h-3.5" /> Print PDF
+                      <Printer className="w-3.5 h-3.5" /> PDF
                     </button>
                   </div>
                 </div>
@@ -731,19 +885,19 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                   </div>
                 ) : (
                   <div className="space-y-3 print:space-y-2">
-                    {activityItems.map((item) => (
+                    {activityItems.map((item, idx) => (
                       <div
                         key={item.id}
-                        className="glass-panel p-4 rounded-2xl flex items-start justify-between group/item border border-white/5 print:border-gray-300 print:bg-white"
+                        className="expense-card glass-panel p-4 rounded-2xl flex items-start justify-between group/item border border-white/[0.04] print:border-gray-300 print:bg-white animate-fade-in-up"
+                        style={{ animationDelay: `${idx * 40}ms`, animationFillMode: 'both' }}
                       >
                         <div className="flex items-start gap-3">
-                          {/* category letter/icon mockup */}
                           {item.type === 'expense' ? (
-                            <div className="w-10 h-10 rounded-xl bg-gray-950 flex items-center justify-center shrink-0 uppercase font-black text-sm text-gradient print:border print:border-gray-250">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/10 to-cyan-500/5 border border-white/[0.06] flex items-center justify-center shrink-0 uppercase font-black text-sm text-gradient print:border print:border-gray-250">
                               {item.category.slice(0,2)}
                             </div>
                           ) : (
-                            <div className="w-10 h-10 rounded-xl bg-emerald-950/20 border border-emerald-500/20 flex items-center justify-center shrink-0 print:border print:border-gray-250">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center shrink-0 print:border print:border-gray-250">
                               <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                             </div>
                           )}
@@ -753,7 +907,7 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                             <p className="text-[10px] text-gray-500 mt-0.5">
                               {item.type === 'expense' ? (
                                 <>
-                                  Paid by <span className="font-semibold text-gray-400 print:text-gray-800">{item.payerName}</span>
+                                  Paid by <span className="font-semibold text-violet-300/80 print:text-gray-800">{item.payerName}</span>
                                 </>
                               ) : (
                                 <span className="text-emerald-400 font-semibold uppercase tracking-wider text-[8px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/10">Settlement</span>
@@ -761,16 +915,15 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                               {` • ${new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
                             </p>
                             
-                            {/* split tooltips/summaries inside exp card */}
                             {item.type === 'expense' && (
                               <div className="flex flex-wrap items-center gap-1.5 mt-2">
                                 {item.splits.map(s => (
                                   <span 
                                     key={s.userId} 
-                                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                                    className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${
                                       s.userId === userId 
-                                        ? 'bg-violet-950/30 text-violet-300 border border-violet-500/10' 
-                                        : 'bg-gray-950/40 text-gray-500'
+                                        ? 'bg-violet-500/10 text-violet-300 border border-violet-500/10' 
+                                        : 'bg-white/[0.03] text-gray-500 border border-white/[0.04]'
                                     } print:border print:border-gray-200 print:text-black`}
                                   >
                                     {s.userName.split(' ')[0]}: ₹{s.shareAmount}
@@ -786,9 +939,9 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                             item.type === 'expense'
                               ? 'text-white'
                               : item.paidBy === userId
-                              ? 'text-gray-400'
+                              ? 'text-rose-400 balance-negative'
                               : item.receiverId === userId
-                              ? 'text-emerald-400'
+                              ? 'text-emerald-400 balance-positive'
                               : 'text-gray-500'
                           }`}>
                             {item.type === 'expense'
@@ -801,21 +954,20 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                             }₹{item.amount}
                           </span>
                           
-                          {/* Admin edit/delete buttons */}
                           {item.type === 'expense' && (
-                            <div className="flex items-center gap-1.5 opacity-0 group-hover/item:opacity-100 transition print:hidden">
+                            <div className="flex items-center gap-1.5 opacity-0 group-hover/item:opacity-100 transition-all print:hidden">
                               {(data.currentUserRole === 'admin' || item.paidBy === userId) && (
                                 <>
                                   <button
                                     onClick={() => openExpenseModal(item.rawItem)}
-                                    className="p-1.5 rounded-lg bg-gray-900 hover:bg-gray-850 text-gray-400 hover:text-white transition cursor-pointer"
+                                    className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-gray-400 hover:text-white transition-all cursor-pointer"
                                     title="Edit Expense"
                                   >
                                     <Settings className="w-3.5 h-3.5" />
                                   </button>
                                   <button
                                     onClick={() => handleDeleteExpense(item.id)}
-                                    className="p-1.5 rounded-lg bg-gray-900 hover:bg-rose-950/30 text-gray-400 hover:text-rose-400 transition cursor-pointer"
+                                    className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-rose-500/10 text-gray-400 hover:text-rose-400 transition-all cursor-pointer"
                                     title="Delete Expense"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -834,23 +986,32 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
               {/* Members & Net Balances List */}
               <div className="space-y-4 print:hidden">
                 <h3 className="font-bold text-base text-white">Group Members</h3>
-                <div className="glass-panel p-5 rounded-2xl border border-white/5 space-y-4">
-                  {data.members.map((member) => (
-                    <div key={member.id} className="flex items-center justify-between text-xs">
+                <div className="glass-panel p-5 rounded-2xl border border-white/[0.04] space-y-1">
+                  {data.members.map((member, idx) => (
+                    <div key={member.id} className="member-card flex items-center justify-between text-xs p-3 rounded-xl animate-fade-in-up" style={{ animationDelay: `${idx * 60}ms`, animationFillMode: 'both' }}>
                       <div className="flex items-center gap-3">
                         {member.avatarUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={member.avatarUrl} alt={member.name} className="w-8 h-8 rounded-full bg-gray-805" />
+                          <img src={member.avatarUrl} alt={member.name} className="w-9 h-9 rounded-full ring-2 ring-white/[0.06]" />
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-gray-500 font-bold">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+                            member.netBalance > 0.05 
+                              ? 'bg-emerald-500/10 text-emerald-400 ring-2 ring-emerald-500/15'
+                              : member.netBalance < -0.05
+                              ? 'bg-rose-500/10 text-rose-400 ring-2 ring-rose-500/15'
+                              : 'bg-white/[0.04] text-gray-500 ring-2 ring-white/[0.06]'
+                          }`}>
                             {member.name[0]}
                           </div>
                         )}
                         <div>
-                          <p className="font-bold text-white flex items-center gap-1">
+                          <p className="font-bold text-white flex items-center gap-1.5">
                             {member.name}
+                            {member.id === userId && (
+                              <span className="text-[7px] uppercase tracking-wider px-1.5 py-0.5 bg-cyan-500/10 text-cyan-300 rounded font-semibold border border-cyan-500/10">You</span>
+                            )}
                             {member.role === 'admin' && (
-                              <span className="text-[8px] uppercase tracking-wider px-1 bg-violet-500/10 text-violet-300 rounded font-semibold border border-violet-500/10">Admin</span>
+                              <span className="text-[7px] uppercase tracking-wider px-1.5 py-0.5 bg-violet-500/10 text-violet-300 rounded font-semibold border border-violet-500/10">Admin</span>
                             )}
                           </p>
                           <p className="text-[10px] text-gray-500">{member.email}</p>
@@ -858,18 +1019,21 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
                       </div>
 
                       <div className="text-right">
-                        <p className={`font-bold ${
+                        <p className={`font-extrabold text-sm ${
                           member.netBalance > 0.05 
-                            ? 'text-emerald-400' 
+                            ? 'text-emerald-400 balance-positive' 
                             : member.netBalance < -0.05 
-                            ? 'text-rose-400' 
-                            : 'text-gray-550'
+                            ? 'text-rose-400 balance-negative' 
+                            : 'text-gray-600'
                         }`}>
                           {member.netBalance > 0.05 
-                            ? `+₹${member.netBalance}` 
+                            ? `+₹${member.netBalance.toFixed(2)}` 
                             : member.netBalance < -0.05 
-                            ? `-₹${Math.abs(member.netBalance)}` 
-                            : 'Settled'}
+                            ? `-₹${Math.abs(member.netBalance).toFixed(2)}` 
+                            : '✓ Settled'}
+                        </p>
+                        <p className="text-[9px] text-gray-600 mt-0.5">
+                          {member.netBalance > 0.05 ? 'gets back' : member.netBalance < -0.05 ? 'owes' : 'all clear'}
                         </p>
                       </div>
                     </div>
@@ -1120,20 +1284,20 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
               
               {/* Overall Totals */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="glass-panel p-5 rounded-2xl border border-white/5">
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Total Group Spending</span>
-                  <p className="text-2xl font-black text-white mt-1">₹{data.totalExpenses}</p>
+                <div className="stat-card-violet p-5 rounded-2xl backdrop-blur-md transition-all duration-300 animate-fade-in-up">
+                  <span className="text-[10px] font-semibold text-violet-300/60 uppercase tracking-wider">Total Group Spending</span>
+                  <p className="text-2xl font-black text-white mt-1">₹{data.totalExpenses.toFixed(2)}</p>
                 </div>
 
-                <div className="glass-panel p-5 rounded-2xl border border-white/5">
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Number of Expenses</span>
-                  <p className="text-2xl font-black text-white mt-1">{data.expenses.length} transactions</p>
+                <div className="stat-card-cyan p-5 rounded-2xl backdrop-blur-md transition-all duration-300 animate-fade-in-up" style={{ animationDelay: '80ms', animationFillMode: 'both' }}>
+                  <span className="text-[10px] font-semibold text-cyan-300/60 uppercase tracking-wider">Number of Expenses</span>
+                  <p className="text-2xl font-black text-white mt-1">{data.expenses.length} <span className="text-sm font-medium text-gray-500">transactions</span></p>
                 </div>
 
-                <div className="glass-panel p-5 rounded-2xl border border-white/5">
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Settled Amount Total</span>
-                  <p className="text-2xl font-black text-emerald-400 mt-1">
-                    ₹{data.settlements.reduce((sum, s) => sum + s.amount, 0)}
+                <div className="stat-card-emerald p-5 rounded-2xl backdrop-blur-md transition-all duration-300 animate-fade-in-up" style={{ animationDelay: '160ms', animationFillMode: 'both' }}>
+                  <span className="text-[10px] font-semibold text-emerald-300/60 uppercase tracking-wider">Settled Amount Total</span>
+                  <p className="text-2xl font-black text-emerald-400 mt-1 balance-positive">
+                    ₹{data.settlements.reduce((sum, s) => sum + s.amount, 0).toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -1342,15 +1506,75 @@ export default function GroupClient({ groupId, userId, initialData }: GroupClien
 
       {/* MODAL 1: ADD / EDIT EXPENSE */}
       {expenseModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in print:hidden">
-          <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-white/5 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 modal-backdrop flex items-center justify-center p-4 z-50 animate-fade-in print:hidden">
+          <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-white/[0.06] shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
             <h3 className="text-lg font-bold text-white mb-4">
               {editExpenseId ? 'Edit Expense' : 'Add Share Bill'}
             </h3>
 
+            {/* OCR Scan Results Preview */}
+            {ocrScanResult && !editExpenseId && (
+              <div className="mb-4 p-4 rounded-2xl bg-gradient-to-br from-cyan-500/[0.06] to-violet-500/[0.04] border border-cyan-500/[0.12] animate-fade-in-up">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs font-bold text-cyan-300">AI Scan Results</span>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => setOcrScanResult(null)} 
+                    className="text-[10px] text-gray-500 hover:text-white cursor-pointer"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+                
+                <p className="text-[10px] text-gray-400 mb-2">
+                  <span className="font-bold text-white">{ocrScanResult.storeName}</span> • {ocrScanResult.date}
+                </p>
+
+                {/* Itemized line items */}
+                <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar mb-3">
+                  {ocrScanResult.items.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between text-[10px]">
+                      <span className="text-gray-400 truncate max-w-[200px]">{item.name}</span>
+                      <span className="text-white font-bold">₹{item.price.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Totals comparison */}
+                <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">Items sum: </span>
+                    <span className={`font-bold ${
+                      Math.abs(ocrScanResult.items.reduce((s, i) => s + i.price, 0) - ocrScanResult.total) < 0.05
+                        ? 'text-emerald-400'
+                        : 'text-amber-400'
+                    }`}>
+                      ₹{ocrScanResult.items.reduce((s, i) => s + i.price, 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="text-[10px]">
+                    <span className="text-gray-500">Total: </span>
+                    <span className="font-extrabold text-white text-xs">₹{ocrScanResult.total.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Per person preview */}
+                {data.members.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-white/[0.04]">
+                    <p className="text-[9px] text-gray-500">
+                      Equal split: <span className="text-violet-300 font-bold">₹{(ocrScanResult.total / data.members.length).toFixed(2)}</span> per person × {data.members.length} members
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <form onSubmit={handleSaveExpense} className="space-y-4 text-xs">
               {expenseError && (
-                <div className="p-3 bg-violet-950/20 border border-violet-500/20 text-violet-300 rounded-xl leading-relaxed">
+                <div className="p-3 bg-violet-500/[0.08] border border-violet-500/[0.12] text-violet-300 rounded-xl leading-relaxed">
                   {expenseError}
                 </div>
               )}
