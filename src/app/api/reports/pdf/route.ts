@@ -92,14 +92,16 @@ export async function GET(request: Request) {
       });
     });
 
-    groupSettlements.forEach((set) => {
-      if (balances[set.payerId] !== undefined) {
-        balances[set.payerId] += set.amount;
-      }
-      if (balances[set.receiverId] !== undefined) {
-        balances[set.receiverId] -= set.amount;
-      }
-    });
+    groupSettlements
+      .filter((set) => set.status === 'completed')
+      .forEach((set) => {
+        if (balances[set.payerId] !== undefined) {
+          balances[set.payerId] += set.amount;
+        }
+        if (balances[set.receiverId] !== undefined) {
+          balances[set.receiverId] -= set.amount;
+        }
+      });
 
     // Members summary with net balance
     const membersSummary = membersList.map((m) => ({

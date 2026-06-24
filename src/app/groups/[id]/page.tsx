@@ -119,14 +119,16 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
     });
   });
 
-  groupSettlements.forEach((set) => {
-    if (balances[set.payerId] !== undefined) {
-      balances[set.payerId] += set.amount;
-    }
-    if (balances[set.receiverId] !== undefined) {
-      balances[set.receiverId] -= set.amount;
-    }
-  });
+  groupSettlements
+    .filter((set) => set.status === 'completed')
+    .forEach((set) => {
+      if (balances[set.payerId] !== undefined) {
+        balances[set.payerId] += set.amount;
+      }
+      if (balances[set.receiverId] !== undefined) {
+        balances[set.receiverId] -= set.amount;
+      }
+    });
 
   // Attach balances to member objects
   const membersWithBalances = membersList.map((m) => ({

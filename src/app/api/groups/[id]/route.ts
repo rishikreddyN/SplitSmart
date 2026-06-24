@@ -139,14 +139,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // When B settles ₹100 debt to A:
     // B (payer/debtor) balance goes from -100 toward 0 → += amount
     // A (receiver/creditor) balance goes from +200 toward +100 → -= amount
-    groupSettlements.forEach((set) => {
-      if (balances[set.payerId] !== undefined) {
-        balances[set.payerId] += set.amount;
-      }
-      if (balances[set.receiverId] !== undefined) {
-        balances[set.receiverId] -= set.amount;
-      }
-    });
+    // IMPORTANT: Only apply *completed* settlements — pending ones haven't been confirmed yet
+    groupSettlements
+      .filter((set) => set.status === 'completed')
+      .forEach((set) => {
+        if (balances[set.payerId] !== undefined) {
+          balances[set.payerId] += set.amount;
+        }
+        if (balances[set.receiverId] !== undefined) {
+          balances[set.receiverId] -= set.amount;
+        }
+      });
 
     // 8. Attach balances to member objects
     const membersWithBalances = membersList.map((m) => ({

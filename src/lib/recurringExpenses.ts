@@ -37,6 +37,35 @@ export async function processDueRecurringExpenses(groupId: string) {
       // In case multiple cycles have passed, create an expense for each cycle
       while (currentDueDate <= today) {
         const dateStr = currentDueDate.toISOString().split('T')[0];
+
+        // 3. Compute the NEXT due date FIRST
+        let nextDate = new Date(currentDueDate);
+        if (rec.frequency === 'daily') {
+          nextDate.setDate(nextDate.getDate() + 1);
+        } else if (rec.frequency === 'weekly') {
+          nextDate.setDate(nextDate.getDate() + 7);
+        } else if (rec.frequency === 'monthly') {
+          nextDate.setMonth(nextDate.getMonth() + 1);
+        } else {
+          // Prevent infinite loop if invalid frequency
+          break;
+        }
+
+        // 4. Advance the nextDueDate in DB BEFORE inserting the expense.
+        //    This acts as an atomic guard — if this request races with another,
+        //    the second fetch won't see this cycle as due anymore.
+        const nextDateStr = nextDate.toISOString().split('T')[0];
+        await db
+          .update(recurringExpenses)
+          .set({ nextDueDate: nextDateStr })
+          .where(
+            and(
+              eq(recurringExpenses.id, rec.id),
+              // Only update if nextDueDate still matches what we selected — prevents double-fire
+              eq(recurringExpenses.nextDueDate, rec.nextDueDate)
+            )
+          );
+
         const newExpenseId = crypto.randomUUID();
 
         // 1. Create the expense
@@ -72,25 +101,8 @@ export async function processDueRecurringExpenses(groupId: string) {
           });
         }
 
-        // 3. Increment currentDueDate by frequency
-        if (rec.frequency === 'daily') {
-          currentDueDate.setDate(currentDueDate.getDate() + 1);
-        } else if (rec.frequency === 'weekly') {
-          currentDueDate.setDate(currentDueDate.getDate() + 7);
-        } else if (rec.frequency === 'monthly') {
-          currentDueDate.setMonth(currentDueDate.getMonth() + 1);
-        } else {
-          // Prevent infinite loop if invalid frequency
-          break;
-        }
+        currentDueDate = nextDate;
       }
-
-      // 4. Update the next due date in db
-      const updatedDueDateStr = currentDueDate.toISOString().split('T')[0];
-      await db
-        .update(recurringExpenses)
-        .set({ nextDueDate: updatedDueDateStr })
-        .where(eq(recurringExpenses.id, rec.id));
     }
   } catch (error) {
     console.error('Error processing recurring expenses:', error);
